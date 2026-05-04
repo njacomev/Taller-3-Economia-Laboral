@@ -1,0 +1,597 @@
+---
+title: "Entrega 3 - Economía Laboral"
+output: html_document
+date: "2026-04-24"
+---
+
+```{r}
+# 1. Paquetes básicos
+library(dplyr)
+library(haven)
+
+# 2. Fijar carpeta donde guardaste la base
+setwd("C:/Users/njaco/Downloads")
+
+# 3. Cargar la base .RData
+load("esi_2024.RData")
+
+# 4. Ver qué objeto se cargó
+ls()
+```
+
+```{r}
+# Ver variables
+names(base)
+
+# Ver estructura
+str(base)
+
+# Ver primeras filas
+head(base)
+```
+
+```{r}
+#nombres variables
+names(base)
+```
+
+```{r}
+#Ver distribución de encuestados por meses
+table(base$mes_encuesta)
+
+summary(base$fact_cal)
+```
+
+```{r}
+table(base$activ)
+```
+
+```{r}
+library(dplyr)
+
+# PET
+pet <- base %>%
+  filter(edad >= 15) %>%
+  summarise(total = sum(fact_cal))
+
+# Fuerza de trabajo
+ft <- base %>%
+  filter(edad >= 15, activ %in% c(1, 2)) %>%
+  summarise(total = sum(fact_cal))
+
+# Ocupados
+ocupados <- base %>%
+  filter(edad >= 15, activ == 1) %>%
+  summarise(total = sum(fact_cal))
+
+# Desocupados
+desocupados <- base %>%
+  filter(edad >= 15, activ == 2) %>%
+  summarise(total = sum(fact_cal))
+
+# Informales
+informales <- base %>%
+  filter(edad >= 15, activ == 1, ocup_form == 2) %>%
+  summarise(total = sum(fact_cal))
+```
+
+```{r}
+tgp <- ft$total / pet$total * 100
+to  <- ocupados$total / pet$total * 100
+td  <- desocupados$total / ft$total * 100
+toi <- informales$total / ocupados$total * 100
+```
+
+```{r}
+tabla <- data.frame(
+  Indicador = c("PET", "Fuerza de Trabajo", "Ocupados", "Desocupados", "Informales",
+                "TGP (%)", "TO (%)", "TD (%)", "TOI (%)"),
+  Valor = c(
+    pet$total,
+    ft$total,
+    ocupados$total,
+    desocupados$total,
+    informales$total,
+    tgp,
+    to,
+    td,
+    toi
+  )
+)
+
+library(stargazer)
+
+stargazer(tabla, type = "text", summary = FALSE)
+```
+
+
+```{r}
+table(base$edu2)
+table(base$edu3)
+table(base$edu1)
+table(base$estudia_actual)
+table(base$termino_nivel)
+
+```
+
+```{r}
+base <- base %>%
+  mutate(edu1 = haven::zap_labels(edu1))
+```
+
+
+```{r}
+library(dplyr)
+
+base <- base %>%
+  mutate(
+    edu1_limpia = ifelse(edu1 %in% c(88, 99), NA, edu1),
+    
+    anos_educ = case_when(
+      edu2 == 0 ~ 0,                         # Nunca estudió
+      edu2 %in% c(1, 2) ~ 0,                 # Sala cuna / kínder
+      
+      edu2 == 3 ~ edu1_limpia,               # Básica o primaria
+      
+      edu2 %in% c(4, 5, 6) ~ 8 + edu1_limpia, # Media común, TP, humanidades
+      
+      edu2 %in% c(7, 8, 9) ~ 12 + edu1_limpia, # CFT, IP, Universitario
+      
+      edu2 == 10 ~ 16,                       # Postítulo
+      edu2 == 11 ~ 18,                       # Magíster
+      edu2 == 12 ~ 20,                       # Doctorado
+      edu2 == 14 ~ 12,                       # Normalista
+      
+      edu2 %in% c(88, 99, 902) ~ NA_real_,
+      TRUE ~ NA_real_
+    )
+  )
+```
+
+
+```{r}
+table(base$anos_educ, useNA = "ifany")
+summary(base$anos_educ)
+```
+
+```{r}
+tabla_escolaridad <- base %>%
+  filter(!is.na(anos_educ)) %>%
+  group_by(anos_educ) %>%
+  summarise(
+    personas = sum(fact_cal, na.rm = TRUE)
+  ) %>%
+  arrange(anos_educ)
+
+tabla_escolaridad
+```
+
+
+
+```{r}
+library(ggplot2)
+ggplot(tabla_escolaridad, aes(x = anos_educ, y = personas/1e6)) +
+  geom_bar(stat = "identity") +
+  labs(
+    title = "Distribución de años de escolaridad en Chile (ESI 2024)",
+    x = "Años de escolaridad",
+    y = "Personas (millones)"
+  ) +
+  theme_minimal()
+```
+
+```{r}
+tabla_check <- tabla_escolaridad %>%
+  mutate(
+    grupo = ifelse(anos_educ == 16, "16 años", "Resto")
+  ) %>%
+  group_by(grupo) %>%
+  summarise(personas = sum(personas)) %>%
+  mutate(
+    porcentaje = personas / sum(personas) * 100
+  )
+
+tabla_check
+```
+
+```{r}
+library(dplyr)
+library(ggplot2)
+
+# Tabla: distribución de escolaridad para todos y ocupados
+tabla_educ_comparada <- base %>%
+  filter(!is.na(anos_educ)) %>%
+  mutate(
+    grupo = ifelse(activ == 1, "Ocupados", "Todos")
+  ) %>%
+  bind_rows(
+    base %>%
+      filter(!is.na(anos_educ)) %>%
+      mutate(grupo = "Todos")
+  ) %>%
+  group_by(grupo, anos_educ) %>%
+  summarise(personas = sum(fact_cal, na.rm = TRUE), .groups = "drop") %>%
+  group_by(grupo) %>%
+  mutate(porcentaje = personas / sum(personas) * 100) %>%
+  ungroup()
+```
+
+
+```{r}
+tabla_todos <- base %>%
+  filter(!is.na(anos_educ)) %>%
+  group_by(anos_educ) %>%
+  summarise(personas = sum(fact_cal, na.rm = TRUE), .groups = "drop") %>%
+  mutate(grupo = "Todos")
+
+tabla_ocupados <- base %>%
+  filter(!is.na(anos_educ), activ == 1) %>%
+  group_by(anos_educ) %>%
+  summarise(personas = sum(fact_cal, na.rm = TRUE), .groups = "drop") %>%
+  mutate(grupo = "Ocupados")
+
+tabla_educ_comparada <- bind_rows(tabla_todos, tabla_ocupados) %>%
+  group_by(grupo) %>%
+  mutate(porcentaje = personas / sum(personas) * 100) %>%
+  ungroup()
+```
+
+
+```{r}
+ggplot(tabla_educ_comparada, aes(x = anos_educ, y = porcentaje, fill = grupo)) +
+  geom_col(position = "dodge") +
+  labs(
+    title = "Distribución de años de escolaridad: total vs ocupados",
+    x = "Años de escolaridad",
+    y = "Porcentaje dentro de cada grupo",
+    fill = ""
+  ) +
+  theme_minimal()
+```
+
+
+```{r}
+base %>%
+  filter(is.na(anos_educ)) %>%
+  count(edu2)
+```
+
+```{r}
+ocupados <- base %>%
+  filter(activ == 1)
+
+mean(is.na(ocupados$habituales))
+mean(is.na(ocupados$r_p_rev4cl_caenes))
+```
+
+```{r}
+table(base$activ)
+
+prop.table(table(base$activ)) * 100
+```
+
+```{r}
+library(dplyr)
+
+ocupados <- base %>%
+  filter(activ == 1) %>%
+  mutate(
+    ingreso_hora = ing_t_t / habituales
+  )
+```
+
+
+```{r}
+ocupados %>%
+  group_by(ocup_form) %>%
+  summarise(
+    educ_prom = weighted.mean(anos_educ, fact_cal, na.rm = TRUE)
+  )
+
+ocupados %>%
+  group_by(ocup_form) %>%
+  summarise(
+    ingreso_prom = weighted.mean(ingreso_hora, fact_cal, na.rm = TRUE)
+  )
+
+ocupados %>%
+  group_by(ocup_form) %>%
+  summarise(
+    horas_prom = weighted.mean(habituales, fact_cal, na.rm = TRUE)
+  )
+
+ocupados %>%
+  group_by(ocup_form) %>%
+  summarise(
+    edad_prom = weighted.mean(edad, fact_cal, na.rm = TRUE)
+  )
+
+ocupados %>%
+  group_by(ocup_form) %>%
+  summarise(
+    prop_mujeres = weighted.mean(sexo == 2, fact_cal, na.rm = TRUE)
+  )
+
+ocupados %>%
+  group_by(ocup_form, r_p_rev4cl_caenes) %>%
+  summarise(personas = sum(fact_cal, na.rm = TRUE)) %>%
+  group_by(ocup_form) %>%
+  mutate(porcentaje = personas / sum(personas) * 100)
+
+```
+
+```{r}
+library(ggplot2)
+
+ocupados %>%
+  group_by(ocup_form) %>%
+  summarise(
+    ingreso = weighted.mean(ingreso_hora, fact_cal, na.rm = TRUE)
+  ) %>%
+  ggplot(aes(x = factor(ocup_form), y = ingreso)) +
+  geom_col() +
+  labs(
+    title = "Ingreso por hora: formal vs informal",
+    x = "Tipo de empleo",
+    y = "Ingreso por hora"
+  ) +
+  theme_minimal()
+```
+
+
+```{r}
+library(dplyr)
+library(ggplot2)
+
+ocupados <- base %>%
+  filter(activ == 1) %>%
+  mutate(
+    tipo_empleo = ifelse(ocup_form == 1, "Formal", "Informal"),
+    ingreso_hora = ing_t_t / habituales
+  )
+```
+
+
+```{r}
+ocupados %>%
+  group_by(tipo_empleo) %>%
+  summarise(educ_prom = weighted.mean(anos_educ, fact_cal, na.rm = TRUE)) %>%
+  ggplot(aes(x = tipo_empleo, y = educ_prom)) +
+  geom_col() +
+  labs(
+    title = "Años promedio de escolaridad",
+    x = "",
+    y = "Años de escolaridad"
+  ) +
+  theme_minimal()
+
+ocupados %>%
+  group_by(tipo_empleo) %>%
+  summarise(ingreso_hora_prom = weighted.mean(ingreso_hora, fact_cal, na.rm = TRUE)) %>%
+  ggplot(aes(x = tipo_empleo, y = ingreso_hora_prom)) +
+  geom_col() +
+  labs(
+    title = "Ingreso promedio por hora",
+    x = "",
+    y = "Ingreso por hora"
+  ) +
+  theme_minimal()
+
+ocupados %>%
+  group_by(tipo_empleo) %>%
+  summarise(horas_prom = weighted.mean(habituales, fact_cal, na.rm = TRUE)) %>%
+  ggplot(aes(x = tipo_empleo, y = horas_prom)) +
+  geom_col() +
+  labs(
+    title = "Horas habituales trabajadas por semana",
+    x = "",
+    y = "Horas semanales"
+  ) +
+  theme_minimal()
+
+ocupados %>%
+  group_by(tipo_empleo) %>%
+  summarise(edad_prom = weighted.mean(edad, fact_cal, na.rm = TRUE)) %>%
+  ggplot(aes(x = tipo_empleo, y = edad_prom)) +
+  geom_col() +
+  labs(
+    title = "Edad promedio",
+    x = "",
+    y = "Edad"
+  ) +
+  theme_minimal()
+
+ocupados %>%
+  mutate(sexo_lab = ifelse(sexo == 1, "Hombre", "Mujer")) %>%
+  group_by(tipo_empleo, sexo_lab) %>%
+  summarise(personas = sum(fact_cal, na.rm = TRUE), .groups = "drop") %>%
+  group_by(tipo_empleo) %>%
+  mutate(porcentaje = personas / sum(personas) * 100) %>%
+  ggplot(aes(x = tipo_empleo, y = porcentaje, fill = sexo_lab)) +
+  geom_col(position = "fill") +
+  labs(
+    title = "Composición por sexo",
+    x = "",
+    y = "Proporción",
+    fill = "Sexo"
+  ) +
+  theme_minimal()
+
+ocupados %>%
+  group_by(tipo_empleo, r_p_rev4cl_caenes) %>%
+  summarise(personas = sum(fact_cal, na.rm = TRUE), .groups = "drop") %>%
+  group_by(tipo_empleo) %>%
+  mutate(porcentaje = personas / sum(personas) * 100) %>%
+  ggplot(aes(x = tipo_empleo, y = porcentaje, fill = factor(r_p_rev4cl_caenes))) +
+  geom_col(position = "fill") +
+  labs(
+    title = "Distribución por sector económico",
+    x = "",
+    y = "Proporción",
+    fill = "Sector"
+  ) +
+  theme_minimal()
+```
+
+
+```{r}
+library(dplyr)
+library(fixest)
+library(modelsummary)
+
+# 1. Base de regresión
+reg_base <- base %>%
+  filter(
+    activ == 1,
+    ocup_form %in% c(1, 2),
+    ing_t_t > 0,
+    habituales > 0,
+    !is.na(anos_educ)
+  ) %>%
+  mutate(
+    informal = ifelse(ocup_form == 2, 1, 0),
+    ingreso_hora = ing_t_t / (habituales * 4.33),
+    ln_w = log(ingreso_hora),
+    exp_pot = pmax(edad - anos_educ - 6, 0),
+    sexo = factor(sexo),
+    nivel_educ = factor(edu2),
+    region = factor(region)
+  )
+
+# 2. Recorte 1% inferior y superior de ln(w)
+p1  <- quantile(reg_base$ln_w, 0.01, na.rm = TRUE)
+p99 <- quantile(reg_base$ln_w, 0.99, na.rm = TRUE)
+
+reg_base_trim <- reg_base %>%
+  filter(ln_w >= p1, ln_w <= p99)
+
+# 3. Modelos progresivos
+m1 <- feols(
+  ln_w ~ informal,
+  data = reg_base_trim,
+  weights = ~fact_cal,
+  vcov = "hetero"
+)
+
+m2 <- feols(
+  ln_w ~ informal + sexo,
+  data = reg_base_trim,
+  weights = ~fact_cal,
+  vcov = "hetero"
+)
+
+m3 <- feols(
+  ln_w ~ informal + sexo + edad + exp_pot,
+  data = reg_base_trim,
+  weights = ~fact_cal,
+  vcov = "hetero"
+)
+
+m4 <- feols(
+  ln_w ~ informal + sexo + edad + exp_pot + anos_educ,
+  data = reg_base_trim,
+  weights = ~fact_cal,
+  vcov = "hetero"
+)
+
+m5 <- feols(
+  ln_w ~ informal + sexo + edad + exp_pot + anos_educ | nivel_educ,
+  data = reg_base_trim,
+  weights = ~fact_cal,
+  vcov = "hetero"
+)
+
+m6 <- feols(
+  ln_w ~ informal + sexo + edad + exp_pot + anos_educ | nivel_educ + region,
+  data = reg_base_trim,
+  weights = ~fact_cal,
+  vcov = "hetero"
+)
+
+# 4. Cuadro de resultados
+etable(m1, m2, m3, m4, m5, m6)
+```
+
+
+```{r}
+modelsummary(
+  list(
+    "(1) No condicionada" = m1,
+    "(2) + Sexo" = m2,
+    "(3) + Edad/experiencia" = m3,
+    "(4) + Escolaridad" = m4,
+    "(5) + FE educación" = m5,
+    "(6) + FE región" = m6
+  ),
+  statistic = "std.error",
+  stars = TRUE,
+  coef_map = c(
+    "informal" = "Informal",
+    "sexo2" = "Mujer",
+    "edad" = "Edad",
+    "exp_pot" = "Experiencia potencial",
+    "anos_educ" = "Años de escolaridad"
+  ),
+  gof_map = c("nobs", "r.squared")
+)
+```
+
+
+
+```{r}
+install.packages("oaxaca")  
+library(oaxaca)
+
+```
+
+
+```{r}
+library(dplyr)
+library(oaxaca)
+set.seed(123)
+
+reg_small <- reg_base_trim %>%
+  sample_n(5000)
+
+oaxaca_model <- oaxaca(
+  ln_w ~ sexo + edad + exp_pot + anos_educ | informal,
+  data = reg_small,
+  R = 1
+)
+
+summary(oaxaca_model)
+```
+
+```{r}
+library(dplyr)
+library(flextable)
+
+# Cuadro resumen Oaxaca-Blinder
+tabla_oaxaca <- data.frame(
+  Componente = c(
+    "Brecha total",
+    "Parte explicada",
+    "Parte no explicada",
+    "% explicado",
+    "% no explicado"
+  ),
+  Valor = c(
+    oaxaca_model$y$y.diff,
+    oaxaca_model$twofold$overall[3, "coef(explained)"],
+    oaxaca_model$twofold$overall[3, "coef(unexplained)"],
+    oaxaca_model$twofold$overall[3, "coef(explained)"] / oaxaca_model$y$y.diff * 100,
+    oaxaca_model$twofold$overall[3, "coef(unexplained)"] / oaxaca_model$y$y.diff * 100
+  )
+)
+
+tabla_oaxaca <- tabla_oaxaca %>%
+  mutate(Valor = round(Valor, 3))
+
+tabla_oaxaca
+```
+
+```{r}
+flextable(tabla_oaxaca) %>%
+  autofit()
+```
+
