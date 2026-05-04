@@ -51,11 +51,6 @@ table(base$activ)
 ```
 
 ```{r}
-table(base$activ)
-```
-
-
-```{r}
 library(dplyr)
 
 # PET
