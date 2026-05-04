@@ -5,18 +5,22 @@ date: "2026-04-24"
 ---
 
 ```{r}
-# 1. Paquetes básicos
+# 1. Paquetes
 library(dplyr)
 library(haven)
 
-# 2. Fijar carpeta donde guardaste la base
-setwd("C:/Users/njaco/Downloads")
+# 2. Descargar base si no existe
+if (!file.exists("esi_2024.RData")) {
+  url <- "https://github.com/njacomev/Taller-3-Economia-Laboral/raw/refs/heads/main/esi_2024.rdata"
+  download.file(url, destfile = "esi_2024.RData", mode = "wb")
+}
 
-# 3. Cargar la base .RData
+# 3. Cargar base
 load("esi_2024.RData")
 
-# 4. Ver qué objeto se cargó
+# 4. Ver objetos
 ls()
+
 ```
 
 ```{r}
@@ -45,6 +49,11 @@ summary(base$fact_cal)
 ```{r}
 table(base$activ)
 ```
+
+```{r}
+table(base$activ)
+```
+
 
 ```{r}
 library(dplyr)
